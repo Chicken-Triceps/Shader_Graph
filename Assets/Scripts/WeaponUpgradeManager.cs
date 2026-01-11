@@ -6,7 +6,7 @@ using System.Collections;
 public class WeaponUpgradeManager : MonoBehaviour
 {
     [Header("=== UI Connection ===")]
-    public Image badgeImage;          // 배지 UI
+    public Image badgeImage;
     public TextMeshProUGUI msgText;
     public GameObject uiGroup;
 
@@ -15,11 +15,14 @@ public class WeaponUpgradeManager : MonoBehaviour
     public MeshRenderer gunRenderer;
 
     [Header("=== Data Settings ===")]
-    public Sprite[] gradeBadges;      // 배지 그림 (Normal, Rare, Legend, Unique)
-    public Material[] gradeMaterials; // 총 스킨 (Normal, Rare, Legend, Unique)
-
-    // ★ 새로 추가된 부분: 배지용 쉐이더 머티리얼 리스트
+    public Sprite[] gradeBadges;
+    public Material[] gradeMaterials;
     public Material[] badgeEffectMaterials;
+
+    [Header("=== Dissolve Settings (New!) ===")]
+    public Material dissolveMaterial; // ★ 만드신 'Dissolve' 머티리얼을 여기에 넣으세요
+    public string dissolvePropertyName = "_DissolveAmount"; // 쉐이더 프로퍼티 이름 (아래 설명 참고)
+    public float dissolveSpeed = 2.0f; // 사라지는 속도
 
     [Header("=== Game Settings ===")]
     [Range(0f, 1f)]
@@ -85,21 +88,16 @@ public class WeaponUpgradeManager : MonoBehaviour
 
     void UpdateVisuals()
     {
-        // 1. 배지 그림(Sprite) 변경
+        // 배지 이미지 변경
         if (badgeImage != null && currentLevel < gradeBadges.Length)
-        {
             badgeImage.sprite = gradeBadges[currentLevel];
-        }
 
-        // ★ 2. 배지 쉐이더(Material) 변경 (핵심!)
+        // 배지 쉐이더 변경
         if (badgeImage != null && currentLevel < badgeEffectMaterials.Length)
-        {
-            // 해당 등급의 머티리얼을 적용 (없으면 기본값)
             badgeImage.material = badgeEffectMaterials[currentLevel];
-        }
 
-        // 3. 총 스킨 변경
-        if (gunRenderer != null && currentLevel < gradeMaterials.Length)
+        // 총 스킨 변경 (파괴 상태가 아닐 때만)
+        if (gunRenderer != null && currentLevel < gradeMaterials.Length && !isDestroyed)
         {
             gunRenderer.material = gradeMaterials[currentLevel];
         }
@@ -115,12 +113,36 @@ public class WeaponUpgradeManager : MonoBehaviour
         UpdateVisuals();
     }
 
+    // ★ 핵심: 디졸브 애니메이션 코루틴
     IEnumerator DestroySequence()
     {
         isDestroyed = true;
         ShowMessage("Upgrade Failed... Weapon Destroyed.", Color.red);
-        yield return new WaitForSeconds(1.0f);
 
+        // 1. 디졸브 머티리얼로 교체
+        // (기존 스킨 대신, 타들어가는 효과가 있는 머티리얼을 씌웁니다)
+        if (gunRenderer != null && dissolveMaterial != null)
+        {
+            gunRenderer.material = dissolveMaterial;
+        }
+
+        // 2. 수치 애니메이션 (-1 ~ 1 범위로 가정)
+        float currentVal = -1f; // 시작값 (완전히 보임)
+
+        while (currentVal < 1f) // 목표값 (완전히 사라짐)
+        {
+            currentVal += Time.deltaTime * dissolveSpeed;
+
+            // 쉐이더에 수치 전달
+            if (gunRenderer != null)
+            {
+                gunRenderer.material.SetFloat(dissolvePropertyName, currentVal);
+            }
+
+            yield return null;
+        }
+
+        // 3. 완전히 사라진 후 오브젝트 끄기
         if (weaponObject != null) weaponObject.SetActive(false);
         if (uiGroup != null) uiGroup.SetActive(false);
     }

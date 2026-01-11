@@ -790,7 +790,10 @@ MonoBehaviour:
   - {fileID: 2100000, guid: 984f53d1284e745409e15fc724ace7fc, type: 2}
   - {fileID: 2100000, guid: 5516a2d85f9548a4bae4a2e80e5eb8fb, type: 2}
   - {fileID: 2100000, guid: a6d434d645c15e1479280a2cd78dc180, type: 2}
-  successChance: 1
+  dissolveMaterial: {fileID: 2100000, guid: 9b72cd11f3c09a04da0bb535ea139d25, type: 2}
+  dissolvePropertyName: _DissolveAmount
+  dissolveSpeed: 2
+  successChance: 0.487
 --- !u!4 &1003022703
 Transform:
   m_ObjectHideFlags: 0
