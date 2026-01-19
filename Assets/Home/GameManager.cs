@@ -5,100 +5,92 @@ public class GameManager : MonoBehaviour
 {
     [Header("설정창 패널")]
     public GameObject settingsPanel;
-
-    [Header("조명 설정")]
-    public Light sunLight;          // 태양 (Directional Light)
-    public Material daySkybox;      // 낮에 쓸 하늘 재질 (설정 안 해도 자동으로 잡음)
-
-    [Header("플레이어 스크립트")]
     public CreativeMove playerScript;
 
+    [Header("낮/밤 조명 색상 (여기서 조절하세요!)")]
+    public Color dayAmbientColor = new Color(0.8f, 0.8f, 0.8f); // 낮에 쓸 화사한 색
+    public Color nightAmbientColor = new Color(0.1f, 0.1f, 0.1f); // 밤에 쓸 어두운 색
+
+    [Header("메인 조명 (태양)")]
+    public Light sunLight;
+    public Material daySkybox;
+    
+    // --- [개별 조명들] ---
+    [Header("개별 조명 연결")]
+    public Light bedLight;    public MeshRenderer bedMesh;    private Color bedOriginColor;
+    public Light deskLight;   public MeshRenderer deskMesh;   private Color deskOriginColor;
+    public Light waveLight;   public MeshRenderer waveMesh;   private Color waveOriginColor;
+
     private bool isMenuOpen = false;
-    private Light[] allLights;      // 씬에 있는 모든 전구를 담을 배열
 
     void Start()
     {
-        // 시작할 때 현재 하늘(Skybox)을 기억해둠 (낮으로 돌아올 때 쓰려고)
         if (daySkybox == null) daySkybox = RenderSettings.skybox;
+
+        if (bedMesh != null) bedOriginColor = bedMesh.material.GetColor("_EmissionColor");
+        if (deskMesh != null) deskOriginColor = deskMesh.material.GetColor("_EmissionColor");
+        if (waveMesh != null) waveOriginColor = waveMesh.material.GetColor("_EmissionColor");
     }
 
     void Update()
     {
-        if (Input.GetKeyDown(KeyCode.Tab))
+        if (Input.GetKeyDown(KeyCode.Escape))
         {
             isMenuOpen = !isMenuOpen;
             settingsPanel.SetActive(isMenuOpen);
-
             Cursor.visible = isMenuOpen;
             Cursor.lockState = isMenuOpen ? CursorLockMode.None : CursorLockMode.Locked;
-
-            if (playerScript != null)
-            {
-                playerScript.canMove = !isMenuOpen;
-            }
+            if (playerScript != null) playerScript.canMove = !isMenuOpen; 
         }
     }
 
-    // [낮] 버튼
+    // --- [핵심 수정] 낮 설정 ---
     public void SetDay()
     {
-        // 1. 하늘(Skybox) 복구
+        // 1. 하늘 복구
         RenderSettings.skybox = daySkybox;
+        
+        // 2. [수정됨] 무조건 'Color' 모드로 변경 (라이팅 창 설정과 동일하게)
+        RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
+        
+        // 3. [수정됨] 사용자가 지정한 '화사한 색' 적용
+        RenderSettings.ambientLight = dayAmbientColor;
 
-        // 2. 환경광(Ambient) 복구 (밝은 회색)
-        RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Skybox;
-        RenderSettings.ambientIntensity = 1.0f;
-
-        // 3. 반사광(Reflection) 복구
-        RenderSettings.reflectionIntensity = 1.0f;
-
-        // 4. 안개(Fog) 복구 (원한다면 켜기)
-        RenderSettings.fog = true;
-
-        // 5. 모든 조명 켜기
-        ToggleAllLights(true);
-
-        // 6. 카메라 배경을 다시 하늘로 설정
-        Camera.main.clearFlags = CameraClearFlags.Skybox;
-
-        Debug.Log("낮: 광명 찾음");
+        if (sunLight != null) sunLight.enabled = true;
     }
 
-    // [밤] 버튼 (완전 암전)
+    // --- 밤 설정 ---
     public void SetNight()
     {
-        // 1. 하늘(Skybox) 없애기
         RenderSettings.skybox = null;
-
-        // 2. 환경광(Ambient) 완전 차단 (검은색)
+        
+        // 밤에도 'Color' 모드 유지 (색깔만 어둡게 바꿈)
         RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
-        RenderSettings.ambientLight = Color.black;
+        RenderSettings.ambientLight = nightAmbientColor;
 
-        // 3. 반사광(Reflection) 끄기 (벽이 반짝이는 것 방지)
-        RenderSettings.reflectionIntensity = 0f;
-
-        // 4. 안개(Fog) 끄기 (안개가 있으면 회색으로 보일 수 있음)
-        RenderSettings.fog = false;
-
-        // 5. 씬에 있는 '모든' 조명 끄기 (태양 포함 전부)
-        ToggleAllLights(false);
-
-        // 6. 카메라 배경을 '단색 검정'으로 강제 변경 (가장 중요!)
-        Camera.main.clearFlags = CameraClearFlags.SolidColor;
-        Camera.main.backgroundColor = Color.black;
-
-        Debug.Log("밤: 칠흑 같은 어둠");
+        if (sunLight != null) sunLight.enabled = false;
     }
 
-    // 씬에 있는 모든 Light 컴포넌트를 찾아서 끄거나 켜는 함수
-    void ToggleAllLights(bool isOn)
-    {
-        // 현재 씬의 모든 조명을 찾아옴
-        allLights = FindObjectsOfType<Light>();
+    // --- 조명 토글 (기존과 동일) ---
+    public void ToggleBedLight() { ToggleLight(bedLight, bedMesh, bedOriginColor); }
+    public void ToggleDeskLight() { ToggleLight(deskLight, deskMesh, deskOriginColor); }
+    public void ToggleWaveLight() { ToggleLight(waveLight, waveMesh, waveOriginColor); }
 
-        foreach (Light light in allLights)
+    void ToggleLight(Light lightObj, MeshRenderer meshObj, Color originColor)
+    {
+        if (lightObj != null)
         {
-            light.enabled = isOn;
+            lightObj.enabled = !lightObj.enabled;
+            UpdateEmission(meshObj, originColor, lightObj.enabled);
+        }
+    }
+
+    void UpdateEmission(MeshRenderer targetMesh, Color onColor, bool isOn)
+    {
+        if (targetMesh != null)
+        {
+            targetMesh.material.SetColor("_EmissionColor", isOn ? onColor : Color.black);
+            DynamicGI.UpdateEnvironment();
         }
     }
 }
