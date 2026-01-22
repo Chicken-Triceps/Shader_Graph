@@ -27,29 +27,38 @@ public class GameManager : MonoBehaviour
     public Material screenBlueMat;
     public Material screenNoiseMat;
 
-    // --- [추가됨] 스피커 시스템 ---
     [Header("Speaker System")]
-    public MeshRenderer speakerMesh; // 스피커 본체(혹은 불 들어오는 부분)
-    public Material speakerOnMat;    // 켜졌을 때 (불빛 O)
-    public Material speakerOffMat;   // 꺼졌을 때 (불빛 X)
+    public MeshRenderer speakerMesh;
+    public Material speakerOnMat;
+    public Material speakerOffMat;
+
+    [Header("Size Highlight System")]
+    public MeshRenderer highlightM_Mesh;
+    public MeshRenderer highlightL_Mesh;
+    public Material highlightOnMat;
+    public Material highlightOffMat;
 
     [Header("UI Button Images")]
-    public Image btnDay;
-    public Image btnNight;
-    public Image btnBed;
-    public Image btnDesk;
-    public Image btnWave;
-    public Image btnComputer;
-    public Image btnMonitor;
-    public Image btnSpeaker; // [추가됨] 스피커 버튼
-
     public Color activeBtnColor = new Color(1f, 1f, 0f);
     public Color inactiveBtnColor = new Color(1f, 1f, 1f);
 
-    // State Variables
+    public Image btnTime00, btnTime06, btnTime12, btnTime18;
+    public Image btnSeason3, btnSeason6, btnSeason9, btnSeason12;
+    public Image btnBed, btnDesk, btnWave;
+    public Image btnComputer, btnMonitor, btnSpeaker;
+    public Image btnSizeM, btnSizeL;
+
+    public enum Season { Spring, Summer, Autumn, Winter }
+    public enum TimeSlot { Night_00, Morning_06, Noon_12, Evening_18 }
+
+    private Season currentSeason = Season.Winter;
+    private TimeSlot currentTime = TimeSlot.Noon_12;
+
     private bool isMonitorOn = false;
     private bool isComputerOn = false;
-    private bool isSpeakerOn = false; // [추가됨] 스피커 스위치 상태
+    private bool isSpeakerOn = false;
+    private bool isSizeM_On = false;
+    private bool isSizeL_On = false;
 
     private float noiseOffset = 0f;
     private bool isMenuOpen = false;
@@ -62,8 +71,10 @@ public class GameManager : MonoBehaviour
         if (deskMesh != null) deskOriginColor = deskMesh.material.GetColor("_EmissionColor");
         if (waveMesh != null) waveOriginColor = waveMesh.material.GetColor("_EmissionColor");
 
+        UpdateSeoulLight();
         UpdateMonitorScreen();
-        UpdateSpeakerState(); // 시작 시 스피커 상태 초기화
+        UpdateSpeakerState();
+        UpdateSizeHighlights();
         UpdateButtonColors();
     }
 
@@ -90,46 +101,196 @@ public class GameManager : MonoBehaviour
     }
 
     // --- Button Actions ---
+    public void SetTime00() { currentTime = TimeSlot.Night_00; UpdateSeoulLight(); UpdateButtonColors(); }
+    public void SetTime06() { currentTime = TimeSlot.Morning_06; UpdateSeoulLight(); UpdateButtonColors(); }
+    public void SetTime12() { currentTime = TimeSlot.Noon_12; UpdateSeoulLight(); UpdateButtonColors(); }
+    public void SetTime18() { currentTime = TimeSlot.Evening_18; UpdateSeoulLight(); UpdateButtonColors(); }
 
-    public void ToggleMonitorBtn()
+    public void SetSeason3() { currentSeason = Season.Spring; UpdateSeoulLight(); UpdateButtonColors(); }
+    public void SetSeason6() { currentSeason = Season.Summer; UpdateSeoulLight(); UpdateButtonColors(); }
+    public void SetSeason9() { currentSeason = Season.Autumn; UpdateSeoulLight(); UpdateButtonColors(); }
+    public void SetSeason12() { currentSeason = Season.Winter; UpdateSeoulLight(); UpdateButtonColors(); }
+
+    public void ToggleBedLight() { ToggleLight(bedLight, bedMesh, bedOriginColor); UpdateButtonColors(); }
+    public void ToggleDeskLight() { ToggleLight(deskLight, deskMesh, deskOriginColor); UpdateButtonColors(); }
+    public void ToggleWaveLight() { ToggleLight(waveLight, waveMesh, waveOriginColor); UpdateButtonColors(); }
+
+    public void ToggleComputerBtn() { isComputerOn = !isComputerOn; UpdateMonitorScreen(); UpdateSpeakerState(); UpdateButtonColors(); }
+    public void ToggleMonitorBtn() { isMonitorOn = !isMonitorOn; UpdateMonitorScreen(); UpdateButtonColors(); }
+    public void ToggleSpeakerBtn() { isSpeakerOn = !isSpeakerOn; UpdateSpeakerState(); UpdateButtonColors(); }
+
+    public void ToggleSizeM() { isSizeM_On = !isSizeM_On; UpdateSizeHighlights(); UpdateButtonColors(); }
+    public void ToggleSizeL() { isSizeL_On = !isSizeL_On; UpdateSizeHighlights(); UpdateButtonColors(); }
+
+    // --- Seoul Lighting Logic ---
+    void UpdateSeoulLight()
     {
-        isMonitorOn = !isMonitorOn;
-        UpdateMonitorScreen();
-        UpdateButtonColors();
+        if (sunLight == null) return;
+
+        float baseSouthY = -90.1f;
+
+        float rotX = 0f;
+        float rotY = 0f;
+        float intensity = 1f;
+        float shadowStrength = 1f; // [New] 그림자 농도 조절용
+        Color lightColor = Color.white;
+        Color ambientColor = Color.black;
+
+        switch (currentTime)
+        {
+            case TimeSlot.Night_00:
+                rotX = -60f;
+                intensity = 0.1f;
+                shadowStrength = 0f; // 밤엔 그림자 없음
+                lightColor = new Color(0.1f, 0.1f, 0.3f);
+                ambientColor = new Color(0.05f, 0.05f, 0.1f);
+                sunLight.shadows = LightShadows.None;
+                break;
+
+            case TimeSlot.Morning_06:
+                sunLight.shadows = LightShadows.Soft;
+                rotY = baseSouthY - 80f;
+
+                if (currentSeason == Season.Summer)
+                {
+                    rotX = 15f;
+                    intensity = 2.5f;
+                    shadowStrength = 0.7f;
+                    lightColor = new Color(1f, 0.9f, 0.8f);
+                    ambientColor = new Color(0.5f, 0.5f, 0.55f); // 밝게 수정
+                }
+                else if (currentSeason == Season.Winter)
+                {
+                    rotX = -5f;
+                    intensity = 0.2f;
+                    shadowStrength = 0.1f;
+                    lightColor = new Color(0.2f, 0.1f, 0.3f);
+                    ambientColor = new Color(0.1f, 0.1f, 0.15f);
+                }
+                else
+                {
+                    rotX = 5f;
+                    intensity = 2.0f;
+                    shadowStrength = 0.5f;
+                    lightColor = new Color(1f, 0.6f, 0.3f);
+                    ambientColor = new Color(0.25f, 0.25f, 0.3f);
+                }
+                break;
+
+            case TimeSlot.Noon_12:
+                sunLight.shadows = LightShadows.Soft;
+                rotY = baseSouthY;
+
+                if (currentSeason == Season.Summer)
+                {
+                    rotX = 76f;
+                    intensity = 4.0f;
+                    shadowStrength = 0.6f; // 여름은 머리 위라 그림자 진함 -> 그러나 화사함을 위해 조금 낮춤
+                    lightColor = Color.white;
+                    ambientColor = new Color(0.6f, 0.6f, 0.6f);
+                }
+                else if (currentSeason == Season.Winter)
+                {
+                    // [핵심 수정] 겨울 정오: 빛이 깊게 들어오고 방 전체가 반사광으로 환해야 함
+                    rotX = 27.2f;
+                    intensity = 4.5f; // 강도 증가 (3.6 -> 4.5)
+                    shadowStrength = 0.55f; // 그림자를 연하게 (0.55) -> 반사광 효과
+                    lightColor = new Color(1f, 0.98f, 0.9f);
+                    ambientColor = new Color(0.7f, 0.7f, 0.7f); // 환경광 대폭 증가 (0.3 -> 0.7)
+                }
+                else
+                {
+                    rotX = 52f;
+                    intensity = 3.8f;
+                    shadowStrength = 0.6f;
+                    lightColor = new Color(1f, 1f, 0.9f);
+                    ambientColor = new Color(0.6f, 0.6f, 0.6f);
+                }
+                break;
+
+            case TimeSlot.Evening_18:
+                sunLight.shadows = LightShadows.Soft;
+                rotY = baseSouthY + 80f;
+
+                if (currentSeason == Season.Summer)
+                {
+                    rotX = 15f;
+                    intensity = 2.5f;
+                    shadowStrength = 0.6f;
+                    lightColor = new Color(1f, 0.8f, 0.6f);
+                    ambientColor = new Color(0.45f, 0.45f, 0.45f);
+                }
+                else if (currentSeason == Season.Winter)
+                {
+                    rotX = -10f;
+                    intensity = 0.1f;
+                    shadowStrength = 0f;
+                    lightColor = new Color(0.1f, 0.1f, 0.2f);
+                    ambientColor = new Color(0.05f, 0.05f, 0.1f);
+                }
+                else
+                {
+                    rotX = 2f;
+                    intensity = 1.5f;
+                    shadowStrength = 0.4f;
+                    lightColor = new Color(1f, 0.4f, 0.2f);
+                    ambientColor = new Color(0.25f, 0.2f, 0.25f);
+                }
+                break;
+        }
+
+        sunLight.transform.rotation = Quaternion.Euler(rotX, rotY, 0);
+        sunLight.color = lightColor;
+        sunLight.intensity = intensity;
+        sunLight.shadowStrength = shadowStrength; // 그림자 농도 적용
+
+        RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
+        RenderSettings.ambientLight = ambientColor;
+
+        sunLight.enabled = true;
     }
 
-    public void ToggleComputerBtn()
+    void UpdateButtonColors()
     {
-        isComputerOn = !isComputerOn;
-        UpdateMonitorScreen();
-        UpdateSpeakerState(); // [중요] 컴퓨터를 끄면 스피커도 영향을 받음
-        UpdateButtonColors();
+        SetBtnColor(btnTime00, currentTime == TimeSlot.Night_00);
+        SetBtnColor(btnTime06, currentTime == TimeSlot.Morning_06);
+        SetBtnColor(btnTime12, currentTime == TimeSlot.Noon_12);
+        SetBtnColor(btnTime18, currentTime == TimeSlot.Evening_18);
+
+        SetBtnColor(btnSeason3, currentSeason == Season.Spring);
+        SetBtnColor(btnSeason6, currentSeason == Season.Summer);
+        SetBtnColor(btnSeason9, currentSeason == Season.Autumn);
+        SetBtnColor(btnSeason12, currentSeason == Season.Winter);
+
+        if (bedLight != null) SetBtnColor(btnBed, bedLight.enabled);
+        if (deskLight != null) SetBtnColor(btnDesk, deskLight.enabled);
+        if (waveLight != null) SetBtnColor(btnWave, waveLight.enabled);
+
+        SetBtnColor(btnComputer, isComputerOn);
+        SetBtnColor(btnMonitor, isMonitorOn);
+        SetBtnColor(btnSpeaker, isSpeakerOn);
+
+        SetBtnColor(btnSizeM, isSizeM_On);
+        SetBtnColor(btnSizeL, isSizeL_On);
     }
 
-    // [추가됨] 스피커 버튼 기능
-    public void ToggleSpeakerBtn()
+    void SetBtnColor(Image btnImg, bool isActive)
     {
-        isSpeakerOn = !isSpeakerOn;
-        UpdateSpeakerState();
-        UpdateButtonColors();
+        if (btnImg != null)
+            btnImg.color = isActive ? activeBtnColor : inactiveBtnColor;
     }
 
-    // --- State Update Logic ---
+    void UpdateSizeHighlights()
+    {
+        if (highlightM_Mesh != null) highlightM_Mesh.material = isSizeM_On ? highlightOnMat : highlightOffMat;
+        if (highlightL_Mesh != null) highlightL_Mesh.material = isSizeL_On ? highlightOnMat : highlightOffMat;
+    }
 
-    // 스피커 상태 결정 함수 (핵심 로직)
     void UpdateSpeakerState()
     {
         if (speakerMesh == null) return;
-
-        // 조건: 스피커 스위치가 켜져 있고(AND) 컴퓨터 전원도 켜져 있어야 함
-        if (isSpeakerOn && isComputerOn)
-        {
-            speakerMesh.material = speakerOnMat; // 불 들어옴
-        }
-        else
-        {
-            speakerMesh.material = speakerOffMat; // 꺼짐 (컴퓨터가 꺼지면 스피커도 자동 꺼짐)
-        }
+        if (isSpeakerOn && isComputerOn) speakerMesh.material = speakerOnMat;
+        else speakerMesh.material = speakerOffMat;
     }
 
     void UpdateMonitorScreen()
@@ -155,57 +316,6 @@ public class GameManager : MonoBehaviour
             }
         }
     }
-
-    void UpdateButtonColors()
-    {
-        bool isDay = (sunLight != null && sunLight.enabled);
-        SetBtnColor(btnDay, isDay);
-        SetBtnColor(btnNight, !isDay);
-
-        if (bedLight != null) SetBtnColor(btnBed, bedLight.enabled);
-        if (deskLight != null) SetBtnColor(btnDesk, deskLight.enabled);
-        if (waveLight != null) SetBtnColor(btnWave, waveLight.enabled);
-
-        SetBtnColor(btnComputer, isComputerOn);
-        SetBtnColor(btnMonitor, isMonitorOn);
-
-        // 스피커 버튼은 '스위치' 상태를 보여줄지, '실제 작동' 상태를 보여줄지 결정해야 함.
-        // 여기서는 "스위치가 눌려있다"는 걸 보여주기 위해 isSpeakerOn 변수를 따라갑니다.
-        // (즉, 컴퓨터가 꺼져서 소리가 안 나도, 스피커 버튼 자체는 켜져(노란색) 있을 수 있음 -> 이게 더 현실적)
-        SetBtnColor(btnSpeaker, isSpeakerOn);
-    }
-
-    void SetBtnColor(Image btnImg, bool isActive)
-    {
-        if (btnImg != null)
-        {
-            btnImg.color = isActive ? activeBtnColor : inactiveBtnColor;
-        }
-    }
-
-    // --- Light Control ---
-
-    public void SetDay()
-    {
-        RenderSettings.skybox = daySkybox;
-        RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
-        RenderSettings.ambientLight = dayAmbientColor;
-        if (sunLight != null) sunLight.enabled = true;
-        UpdateButtonColors();
-    }
-
-    public void SetNight()
-    {
-        RenderSettings.skybox = null;
-        RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
-        RenderSettings.ambientLight = nightAmbientColor;
-        if (sunLight != null) sunLight.enabled = false;
-        UpdateButtonColors();
-    }
-
-    public void ToggleBedLight() { ToggleLight(bedLight, bedMesh, bedOriginColor); UpdateButtonColors(); }
-    public void ToggleDeskLight() { ToggleLight(deskLight, deskMesh, deskOriginColor); UpdateButtonColors(); }
-    public void ToggleWaveLight() { ToggleLight(waveLight, waveMesh, waveOriginColor); UpdateButtonColors(); }
 
     void ToggleLight(Light lightObj, MeshRenderer meshObj, Color originColor)
     {
