@@ -20,6 +20,15 @@ public class GameManager : MonoBehaviour
     public Light deskLight; public MeshRenderer deskMesh; private Color deskOriginColor;
     public Light waveLight; public MeshRenderer waveMesh; private Color waveOriginColor;
 
+    // [추가됨] 주방등 시스템 설정 ==============================================
+    [Header("Kitchen System")]
+    public Renderer[] kitchenRenderers; // 주방등 3D 모델 (배열)
+    public Light[] kitchenLights;       // 실제 Point Light (배열)
+    public Material kitchenOnMat;       // 켜졌을 때 재질
+    public Material kitchenOffMat;      // 꺼졌을 때 재질
+    private bool isKitchenOn = false;   // 주방등 상태
+    // =======================================================================
+
     [Header("Computer System")]
     public MeshRenderer monitorScreen;
     public GameObject monitorCanvasObject;
@@ -48,6 +57,9 @@ public class GameManager : MonoBehaviour
     public Image btnComputer, btnMonitor, btnSpeaker;
     public Image btnSizeM, btnSizeL;
 
+    // [추가됨] 주방등 버튼 이미지
+    public Image btnKitchen;
+
     public enum Season { Spring, Summer, Autumn, Winter }
     public enum TimeSlot { Night_00, Morning_06, Noon_12, Evening_18 }
 
@@ -75,6 +87,10 @@ public class GameManager : MonoBehaviour
         UpdateMonitorScreen();
         UpdateSpeakerState();
         UpdateSizeHighlights();
+
+        // [추가됨] 시작 시 주방등 상태 초기화
+        UpdateKitchenState();
+
         UpdateButtonColors();
     }
 
@@ -122,6 +138,36 @@ public class GameManager : MonoBehaviour
     public void ToggleSizeM() { isSizeM_On = !isSizeM_On; UpdateSizeHighlights(); UpdateButtonColors(); }
     public void ToggleSizeL() { isSizeL_On = !isSizeL_On; UpdateSizeHighlights(); UpdateButtonColors(); }
 
+    // [추가됨] 주방등 토글 버튼 액션 ===========================================
+    public void ToggleKitchenBtn()
+    {
+        isKitchenOn = !isKitchenOn;
+        UpdateKitchenState(); // 3D 모델 및 조명 상태 갱신
+        UpdateButtonColors(); // UI 버튼 색상 갱신
+    }
+
+    void UpdateKitchenState()
+    {
+        // 1. 3D 모델 재질 변경 (On/Off)
+        if (kitchenRenderers != null)
+        {
+            foreach (Renderer rend in kitchenRenderers)
+            {
+                if (rend != null) rend.material = isKitchenOn ? kitchenOnMat : kitchenOffMat;
+            }
+        }
+
+        // 2. 실제 조명 켜기/끄기
+        if (kitchenLights != null)
+        {
+            foreach (Light light in kitchenLights)
+            {
+                if (light != null) light.enabled = isKitchenOn;
+            }
+        }
+    }
+    // =======================================================================
+
     // --- Seoul Lighting Logic ---
     void UpdateSeoulLight()
     {
@@ -132,7 +178,7 @@ public class GameManager : MonoBehaviour
         float rotX = 0f;
         float rotY = 0f;
         float intensity = 1f;
-        float shadowStrength = 1f; // [New] 그림자 농도 조절용
+        float shadowStrength = 1f;
         Color lightColor = Color.white;
         Color ambientColor = Color.black;
 
@@ -141,7 +187,7 @@ public class GameManager : MonoBehaviour
             case TimeSlot.Night_00:
                 rotX = -60f;
                 intensity = 0.1f;
-                shadowStrength = 0f; // 밤엔 그림자 없음
+                shadowStrength = 0f;
                 lightColor = new Color(0.1f, 0.1f, 0.3f);
                 ambientColor = new Color(0.05f, 0.05f, 0.1f);
                 sunLight.shadows = LightShadows.None;
@@ -153,25 +199,19 @@ public class GameManager : MonoBehaviour
 
                 if (currentSeason == Season.Summer)
                 {
-                    rotX = 15f;
-                    intensity = 2.5f;
-                    shadowStrength = 0.7f;
+                    rotX = 15f; intensity = 2.5f; shadowStrength = 0.7f;
                     lightColor = new Color(1f, 0.9f, 0.8f);
-                    ambientColor = new Color(0.5f, 0.5f, 0.55f); // 밝게 수정
+                    ambientColor = new Color(0.5f, 0.5f, 0.55f);
                 }
                 else if (currentSeason == Season.Winter)
                 {
-                    rotX = -5f;
-                    intensity = 0.2f;
-                    shadowStrength = 0.1f;
+                    rotX = -5f; intensity = 0.2f; shadowStrength = 0.1f;
                     lightColor = new Color(0.2f, 0.1f, 0.3f);
                     ambientColor = new Color(0.1f, 0.1f, 0.15f);
                 }
                 else
                 {
-                    rotX = 5f;
-                    intensity = 2.0f;
-                    shadowStrength = 0.5f;
+                    rotX = 5f; intensity = 2.0f; shadowStrength = 0.5f;
                     lightColor = new Color(1f, 0.6f, 0.3f);
                     ambientColor = new Color(0.25f, 0.25f, 0.3f);
                 }
@@ -183,26 +223,19 @@ public class GameManager : MonoBehaviour
 
                 if (currentSeason == Season.Summer)
                 {
-                    rotX = 76f;
-                    intensity = 4.0f;
-                    shadowStrength = 0.6f; // 여름은 머리 위라 그림자 진함 -> 그러나 화사함을 위해 조금 낮춤
+                    rotX = 76f; intensity = 4.0f; shadowStrength = 0.6f;
                     lightColor = Color.white;
                     ambientColor = new Color(0.6f, 0.6f, 0.6f);
                 }
                 else if (currentSeason == Season.Winter)
                 {
-                    // [핵심 수정] 겨울 정오: 빛이 깊게 들어오고 방 전체가 반사광으로 환해야 함
-                    rotX = 27.2f;
-                    intensity = 4.5f; // 강도 증가 (3.6 -> 4.5)
-                    shadowStrength = 0.55f; // 그림자를 연하게 (0.55) -> 반사광 효과
+                    rotX = 27.2f; intensity = 4.5f; shadowStrength = 0.55f;
                     lightColor = new Color(1f, 0.98f, 0.9f);
-                    ambientColor = new Color(0.7f, 0.7f, 0.7f); // 환경광 대폭 증가 (0.3 -> 0.7)
+                    ambientColor = new Color(0.7f, 0.7f, 0.7f);
                 }
                 else
                 {
-                    rotX = 52f;
-                    intensity = 3.8f;
-                    shadowStrength = 0.6f;
+                    rotX = 52f; intensity = 3.8f; shadowStrength = 0.6f;
                     lightColor = new Color(1f, 1f, 0.9f);
                     ambientColor = new Color(0.6f, 0.6f, 0.6f);
                 }
@@ -214,25 +247,19 @@ public class GameManager : MonoBehaviour
 
                 if (currentSeason == Season.Summer)
                 {
-                    rotX = 15f;
-                    intensity = 2.5f;
-                    shadowStrength = 0.6f;
+                    rotX = 15f; intensity = 2.5f; shadowStrength = 0.6f;
                     lightColor = new Color(1f, 0.8f, 0.6f);
                     ambientColor = new Color(0.45f, 0.45f, 0.45f);
                 }
                 else if (currentSeason == Season.Winter)
                 {
-                    rotX = -10f;
-                    intensity = 0.1f;
-                    shadowStrength = 0f;
+                    rotX = -10f; intensity = 0.1f; shadowStrength = 0f;
                     lightColor = new Color(0.1f, 0.1f, 0.2f);
                     ambientColor = new Color(0.05f, 0.05f, 0.1f);
                 }
                 else
                 {
-                    rotX = 2f;
-                    intensity = 1.5f;
-                    shadowStrength = 0.4f;
+                    rotX = 2f; intensity = 1.5f; shadowStrength = 0.4f;
                     lightColor = new Color(1f, 0.4f, 0.2f);
                     ambientColor = new Color(0.25f, 0.2f, 0.25f);
                 }
@@ -242,7 +269,7 @@ public class GameManager : MonoBehaviour
         sunLight.transform.rotation = Quaternion.Euler(rotX, rotY, 0);
         sunLight.color = lightColor;
         sunLight.intensity = intensity;
-        sunLight.shadowStrength = shadowStrength; // 그림자 농도 적용
+        sunLight.shadowStrength = shadowStrength;
 
         RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
         RenderSettings.ambientLight = ambientColor;
@@ -265,6 +292,9 @@ public class GameManager : MonoBehaviour
         if (bedLight != null) SetBtnColor(btnBed, bedLight.enabled);
         if (deskLight != null) SetBtnColor(btnDesk, deskLight.enabled);
         if (waveLight != null) SetBtnColor(btnWave, waveLight.enabled);
+
+        // [추가됨] 주방등 버튼 색상 갱신
+        SetBtnColor(btnKitchen, isKitchenOn);
 
         SetBtnColor(btnComputer, isComputerOn);
         SetBtnColor(btnMonitor, isMonitorOn);
