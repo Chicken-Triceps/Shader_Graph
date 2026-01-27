@@ -1,12 +1,13 @@
 using UnityEngine;
 using UnityEngine.UI;
+using System.Collections; // [필수] 코루틴 사용을 위해 추가
 
 public class GameManager : MonoBehaviour
 {
     [Header("UI & Player Settings")]
     public GameObject settingsPanel;
     public CreativeMove playerScript;
-    public Camera mainCamera; // [필수 추가] 메인 카메라를 여기에 넣으세요!
+    public Camera mainCamera;
 
     [Header("Day/Night Ambient Colors")]
     public Color dayAmbientColor = new Color(0.8f, 0.8f, 0.8f);
@@ -15,6 +16,13 @@ public class GameManager : MonoBehaviour
     [Header("Main Light (Sun)")]
     public Light sunLight;
     public Material daySkybox;
+
+    [Header("Main Room Light (Living Room)")]
+    public Renderer[] mainRoomRenderers; // 네모난 등기구 모델 (Mesh Renderer)
+    public Light[] mainRoomLights;       // 그 밑에 달린 Point Light
+    public Material mainRoomOnMat;       // 켜진 재질 (Emission On)
+    public Material mainRoomOffMat;      // 꺼진 재질 (Emission Off)
+    private bool isMainRoomOn = false;   // 상태 변수
 
     [Header("Individual Lights")]
     public Light bedLight; public MeshRenderer bedMesh; private Color bedOriginColor;
@@ -52,6 +60,14 @@ public class GameManager : MonoBehaviour
     public ParticleSystem snowSystem;
     private bool isWeatherOn = false;
 
+    // [추가됨] 뇌우 시스템 ====================================================
+    [Header("Thunder System")]
+    public AudioSource thunderAudio; // 천둥 소리 재생기
+    public AudioClip thunderClip;    // 천둥 소리 파일
+    private bool isThunderOn = false;
+    private float thunderTimer = 0f; // 번개 칠 타이밍 계산
+    // =======================================================================
+
     [Header("UI Button Images")]
     public Color activeBtnColor = new Color(1f, 1f, 0f);
     public Color inactiveBtnColor = new Color(1f, 1f, 1f);
@@ -64,6 +80,10 @@ public class GameManager : MonoBehaviour
     public Image btnKitchen;
     public Image btnRGB;
     public Image btnWeather;
+    public Image btnMainLight;
+
+    // [추가됨] 뇌우 버튼 이미지
+    public Image btnThunder;
 
     public enum Season { Spring, Summer, Autumn, Winter }
     public enum TimeSlot { Night_00, Morning_06, Noon_12, Evening_18 }
@@ -85,9 +105,7 @@ public class GameManager : MonoBehaviour
 
     void Start()
     {
-        // 카메라 자동 찾기 (혹시 연결 안 했을 때 대비)
         if (mainCamera == null) mainCamera = Camera.main;
-
         if (daySkybox == null) daySkybox = RenderSettings.skybox;
 
         if (bedMesh != null) bedOriginColor = bedMesh.material.GetColor("_EmissionColor");
@@ -101,6 +119,7 @@ public class GameManager : MonoBehaviour
         UpdateSizeHighlights();
         UpdateKitchenState();
         UpdateWeatherState();
+        UpdateMainRoomState();
         UpdateButtonColors();
     }
 
@@ -127,6 +146,18 @@ public class GameManager : MonoBehaviour
             hueValue += Time.deltaTime * rgbSpeed;
             if (hueValue > 1.0f) hueValue = 0f;
             computerLight.color = Color.HSVToRGB(hueValue, 1f, 1f);
+        }
+
+        // 뇌우 로직: 랜덤한 시간마다 Lightning
+        if (isWeatherOn && isThunderOn)
+        {
+            thunderTimer -= Time.deltaTime;
+            if (thunderTimer <= 0f)
+            {
+                StartCoroutine(DoLightningEffect());
+                // 다음 번개는 3초 ~ 10초 사이 랜덤한 시간에 침
+                thunderTimer = Random.Range(3f, 10f);
+            }
         }
     }
 
@@ -160,10 +191,66 @@ public class GameManager : MonoBehaviour
     public void ToggleWeatherBtn()
     {
         isWeatherOn = !isWeatherOn;
+
+        // [중요] 날씨를 끄면 뇌우도 강제로 같이 꺼짐
+        if (!isWeatherOn) isThunderOn = false;
+
         UpdateWeatherState();
         UpdateSeoulLight();
         UpdateButtonColors();
     }
+
+    // [추가됨] 뇌우 버튼 함수
+    public void ToggleThunderBtn()
+    {
+        // [핵심] 날씨(강수)가 꺼져있으면 아예 함수 종료 (아무 반응 없음)
+        if (!isWeatherOn) return;
+
+        isThunderOn = !isThunderOn;
+
+        // 뇌우를 켜자마자 바로 한번 번쩍! (피드백)
+        if (isThunderOn)
+        {
+            thunderTimer = Random.Range(0.5f, 2f); // 곧 번개 침
+        }
+
+        UpdateButtonColors();
+    }
+
+    // [추가됨] 번개 효과 코루틴 (번쩍임 + 소리)
+    IEnumerator DoLightningEffect()
+    {
+        // 1. 천둥 소리 재생
+        if (thunderAudio != null && thunderClip != null)
+        {
+            thunderAudio.PlayOneShot(thunderClip);
+        }
+
+        // 2. 번개 번쩍 (어두운 배경 -> 흰색 배경 -> 다시 어두움)
+        // 기존 상태 저장
+        Color originalBG = mainCamera.backgroundColor;
+
+        // 번개 (흰색 배경)
+        mainCamera.backgroundColor = new Color(0.8f, 0.8f, 0.9f);
+        sunLight.enabled = true; // 태양 잠깐 켜서 그림자 만들기
+        sunLight.intensity = 5f; // 아주 밝게
+
+        yield return new WaitForSeconds(0.1f); // 0.1초 유지
+
+        // 원상 복구 (어두움)
+        mainCamera.backgroundColor = originalBG;
+        sunLight.enabled = false; // 태양 다시 끄기
+
+        yield return new WaitForSeconds(0.05f); // 잠깐 쉬고
+
+        // 한번 더 짧게 번쩍 (리얼함 추가)
+        mainCamera.backgroundColor = new Color(0.6f, 0.6f, 0.7f);
+        yield return new WaitForSeconds(0.05f);
+
+        // 최종 복구
+        mainCamera.backgroundColor = originalBG;
+    }
+
 
     void UpdateWeatherState()
     {
@@ -188,6 +275,35 @@ public class GameManager : MonoBehaviour
         }
     }
 
+    // [추가됨] 메인 조명 토글 버튼
+    public void ToggleMainRoomBtn()
+    {
+        isMainRoomOn = !isMainRoomOn;
+        UpdateMainRoomState();
+        UpdateButtonColors();
+    }
+
+    void UpdateMainRoomState()
+    {
+        // 1. 등기구(판) 색상 변경 (눈에 보이는 것)
+        if (mainRoomRenderers != null)
+        {
+            foreach (Renderer rend in mainRoomRenderers)
+            {
+                if (rend != null) rend.material = isMainRoomOn ? mainRoomOnMat : mainRoomOffMat;
+            }
+        }
+
+        // 2. 실제 조명 켜기/끄기 (방 밝기)
+        if (mainRoomLights != null)
+        {
+            foreach (Light light in mainRoomLights)
+            {
+                if (light != null) light.enabled = isMainRoomOn;
+            }
+        }
+    }
+
     void UpdateComputerLight() { if (computerLight != null) { computerLight.enabled = isComputerOn; if (isComputerOn && !isRGBMode) computerLight.color = Color.white; } }
 
     void UpdateKitchenState()
@@ -196,7 +312,6 @@ public class GameManager : MonoBehaviour
         if (kitchenLights != null) foreach (Light light in kitchenLights) if (light != null) light.enabled = isKitchenOn;
     }
 
-    // --- Seoul Lighting Logic ---
     void UpdateSeoulLight()
     {
         if (sunLight == null) return;
@@ -204,7 +319,6 @@ public class GameManager : MonoBehaviour
         float rotX = 0f; float rotY = 0f; float intensity = 1f; float shadowStrength = 1f;
         Color lightColor = Color.white; Color ambientColor = Color.black;
 
-        // 1. 기본 조명 계산
         switch (currentTime)
         {
             case TimeSlot.Night_00:
@@ -230,51 +344,24 @@ public class GameManager : MonoBehaviour
                 break;
         }
 
-        // 2. [핵심 수정] 날씨 ON -> 하늘 색상(Skybox) 교체 및 태양 끄기
         if (isWeatherOn && currentTime != TimeSlot.Night_00)
         {
-            // (1) 태양 끄기 (Sun Disk 자체가 안 보이게 됨)
             sunLight.enabled = false;
-
-            // (2) 카메라 배경을 "단색(Solid Color)"으로 변경
-            // 이렇게 해야 파란 하늘 그림이 사라지고 어두운 회색이 됩니다.
-            if (mainCamera != null)
-            {
-                mainCamera.clearFlags = CameraClearFlags.SolidColor;
-                // 아주 어두운 회색 (비/눈 오는 하늘색)
-                mainCamera.backgroundColor = new Color(0.25f, 0.25f, 0.28f);
-            }
-
-            // (3) 환경광(방 분위기) 어둡게
+            if (mainCamera != null) { mainCamera.clearFlags = CameraClearFlags.SolidColor; mainCamera.backgroundColor = new Color(0.25f, 0.25f, 0.28f); }
             ambientColor *= 0.3f;
-
-            // (4) 안개(Fog) 켜기 (배경색과 맞춰서 자연스럽게)
-            RenderSettings.fog = true;
-            RenderSettings.fogDensity = 0.08f; // 안개 더 진하게
-            RenderSettings.fogColor = new Color(0.25f, 0.25f, 0.28f); // 배경색과 일치
+            RenderSettings.fog = true; RenderSettings.fogDensity = 0.08f; RenderSettings.fogColor = new Color(0.25f, 0.25f, 0.28f);
         }
         else
         {
-            // 날씨 OFF -> 원래대로 복구
-
-            // (1) 태양 다시 켜기
             sunLight.enabled = true;
-
-            // (2) 카메라 배경을 다시 "Skybox"로 변경
-            if (mainCamera != null)
-            {
-                mainCamera.clearFlags = CameraClearFlags.Skybox;
-            }
-
+            if (mainCamera != null) { mainCamera.clearFlags = CameraClearFlags.Skybox; }
             RenderSettings.fog = false;
         }
 
-        // 3. 최종 적용
         sunLight.transform.rotation = Quaternion.Euler(rotX, rotY, 0);
         sunLight.color = lightColor;
         sunLight.intensity = intensity;
         sunLight.shadowStrength = shadowStrength;
-
         RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
         RenderSettings.ambientLight = ambientColor;
     }
@@ -303,6 +390,10 @@ public class GameManager : MonoBehaviour
         SetBtnColor(btnSizeM, isSizeM_On);
         SetBtnColor(btnSizeL, isSizeL_On);
         SetBtnColor(btnWeather, isWeatherOn);
+        SetBtnColor(btnMainLight, isMainRoomOn);
+
+        // [추가됨] 뇌우 버튼 색상
+        SetBtnColor(btnThunder, isThunderOn);
     }
 
     void SetBtnColor(Image btnImg, bool isActive) { if (btnImg != null) btnImg.color = isActive ? activeBtnColor : inactiveBtnColor; }
